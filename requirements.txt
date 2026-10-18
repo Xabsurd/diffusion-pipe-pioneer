@@ -28,7 +28,8 @@ wandb
 optimum-quanto
 wheel
 ninja
-comfy-kitchen
-comfy-aimdo
+# Versions required by the ComfyUI commit pinned on this branch.
+comfy-kitchen==0.2.38
+comfy-aimdo==0.5.6
 scipy
 av>=16.0.0

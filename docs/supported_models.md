@@ -29,6 +29,8 @@
 |Krea 2          |✅    |✅              |✅                |
 |MiniMax H3      |✅    |✅              |✅                |
 |Qwen-Image-2.1  |✅    |✅              |✅                |
+|Flux 3 Klein    |✅    |✅              |✅                |
+|MOSS-Image      |✅    |✅              |✅                |
 
 
 ## SDXL
@@ -404,6 +406,8 @@ timestep_sample_method = 'logit_normal'
 ```
 Configuring and training Qwen-Image-Edit is the same as Flux-Kontext. See the [example dataset config](../examples/flux_kontext_dataset.toml). The same dataset considerations apply. The reference images are resized to whatever size bucket the target images end up in, so your reference images need to have approximately the same aspect ratio as the targets, or else they will be overly cropped.
 
+`control_path` is one reference directory. `control_paths` is a list of directories, one per reference, matched by filename stem. Do not set both. Every target needs a file in each directory.
+
 The model is taking larger inputs than T2I training, so it is slower and uses more VRAM. I don't know if you can train it on 24GB VRAM. Maybe if you block swap enough.
 
 Qwen-Image-Edit LoRAs are saved in ComfyUI format.
@@ -533,7 +537,7 @@ shift = 3
 Notes:
 - Use ComfyUI-compatible weights for all models.
 - For Klein, **use the base model**. Klein is step-distilled, and so the distilled version will not work well.
-- Edit training also works, see the [example dataset config](../examples/flux_kontext_dataset.toml) for how to configure an edit dataset.
+- Edit training also works, see the [example dataset config](../examples/flux_kontext_dataset.toml) for how to configure an edit dataset. One reference directory is `control_path`. Several references are `control_paths`, a list of directories matched by filename stem. Reference latents are scaled once, when they are cached.
 - Without block swapping, Dev needs at least 48GB VRAM for LoRA training and probably a lot of system RAM also.
 - The Flux2 VAE has more channels, so a timestep shift value above 1 is useful. I don't know the best value but 3 seems to work well.
 - Make sure you're using the right text encoder. Each version uses a different TE. If you use the wrong one, the caching will still run but you will get shape mismatch errors when it tries to train.
@@ -666,4 +670,49 @@ dtype = 'bfloat16'
 timestep_sample_method = 'logit_normal'
 #merge_adapters = ['/path/to/training_adapter.safetensors']  # merges adapters into weights before training starts
 ```
-Everything is ComfyUI model format. Only T2I is currently supported. I2I edit training would require significant refactors of the dataset processing code (it assumes the text embeddings can be computed from the text prompt alone, which isn't true for this model). Qwen-Image-2.1 is a CFG-distilled model. Training it without a de-distillation adapter breaks the distillation and you will need to use CFG for inference.
+Everything is ComfyUI model format. Text-to-image and reference-image edit training are both supported. Edit uses `control_path` or `control_paths` in the dataset config. See [examples/qwen_image21_edit_dataset.toml](../examples/qwen_image21_edit_dataset.toml).
+
+Edit training has two constraints. Set `uncond_fraction = 0`. The shared empty caption has no reference images, so it cannot be mixed into an edit batch. Every directory in one run must use the same number of reference images, including zero. Do not mix text-to-image and edit directories, and do not mix different reference counts. After changing captions or reference images, regenerate the text-embedding cache. `edit_vlm_resolution` (default 1024) is the approximate pixel count of each reference as seen by the text encoder. `0` keeps the original size rounded to a multiple of 32. The VAE still encodes the reference at the target image's size bucket, so a very different aspect ratio is cropped.
+
+Qwen-Image-2.1 is a CFG-distilled model. Training it without a de-distillation adapter breaks the distillation and you will need to use CFG for inference. `merge_adapters` is unchanged and is the place to load that adapter.
+
+## Flux 3 Klein
+```
+[model]
+type = 'flux3'
+# Klein Base. The step-distilled checkpoint is rejected: it contains ref_time_in.
+diffusion_model = '/home/anon/ComfyUI/models/diffusion_models/flux-3-klein-base.safetensors'
+vae = '/home/anon/ComfyUI/models/vae/flux2-vae.safetensors'
+text_encoders = [
+    {path = '/home/anon/ComfyUI/models/text_encoders/qwen3vl_4b_bf16.safetensors', type = 'flux3'}
+]
+dtype = 'bfloat16'
+diffusion_model_dtype = 'float8'
+timestep_sample_method = 'logit_normal'
+# Multiplier form of the reference shift. ComfyUI sampling stores mu = ln(6.93) instead.
+shift = 6.93
+```
+
+Train Klein Base, not the step-distilled flow-map checkpoint. A LoRA trained on Base can be loaded on the distilled model afterwards. Text-to-image and up to 10 reference images are supported. Use `control_path` or `control_paths`. Every directory in one run needs the same reference count. The text encoder does not see the reference pixels. References stay in the latent stream, so `uncond_fraction` can stay above 0. The text encoder is Qwen3-VL-4B and is large. Cache embeddings, then let the trainer free it. Saved LoRAs use the ComfyUI key prefix.
+
+This model is only in the ComfyUI commit pinned by this branch. See [docs/maintained-branch.md](maintained-branch.md).
+
+## MOSS-Image
+```
+[model]
+type = 'moss_image'
+# MOSS-Image-Base. Not the SFT checkpoint.
+diffusion_model = '/home/anon/ComfyUI/models/diffusion_models/moss_image_base.safetensors'
+vae = '/home/anon/ComfyUI/models/vae/flux2-vae.safetensors'
+text_encoders = [
+    {path = '/home/anon/ComfyUI/models/text_encoders/qwen3.5_9b_bf16.safetensors', type = 'moss_image'}
+]
+dtype = 'bfloat16'
+diffusion_model_dtype = 'float8'
+timestep_sample_method = 'logit_normal'
+shift = 5
+```
+
+MOSS-Image-Base is text-to-image only. This release has no reference-image path, and setting `control_path` or `control_paths` is an error. The text encoder is Qwen3.5-9B (about 19GB in bf16). Cache it, then let the trainer unload it. The diffusion model uses the FLUX.2 VAE. Sampling for the base model is about CFG 3 and 50 steps. Saved LoRAs use the ComfyUI key prefix.
+
+This model is only in the ComfyUI commit pinned by this branch. See [docs/maintained-branch.md](maintained-branch.md).

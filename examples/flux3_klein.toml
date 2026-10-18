@@ -1,0 +1,46 @@
+# FLUX 3 Klein Base. Read docs/maintained-branch.md before training.
+# The step-distilled checkpoint is rejected.
+
+output_dir = '/path/to/desired/output/folder'
+dataset = 'examples/dataset.toml'
+
+epochs = 1000
+micro_batch_size_per_gpu = 1
+pipeline_stages = 1
+gradient_accumulation_steps = 4
+gradient_clipping = 1
+eval_every_n_epochs = 1
+eval_before_first_step = true
+eval_micro_batch_size_per_gpu = 1
+eval_gradient_accumulation_steps = 1
+save_every_n_epochs = 5
+checkpoint_every_n_minutes = 120
+activation_checkpointing = true
+partition_method = 'parameters'
+save_dtype = 'bfloat16'
+caching_batch_size = 1
+steps_per_print = 1
+# Block swap needs pipeline_stages = 1 and a LoRA. Prefer swapping single blocks; the rest come from the early blocks.
+# blocks_to_swap = 8
+
+[model]
+type = 'flux3'
+diffusion_model = '/path/to/flux-3-klein-base.safetensors'
+vae = '/path/to/flux2-vae.safetensors'
+text_encoders = [
+    {path = '/path/to/qwen3vl_4b.safetensors', type = 'flux3'}
+]
+dtype = 'bfloat16'
+diffusion_model_dtype = 'float8'
+timestep_sample_method = 'logit_normal'
+# Multiplier. ComfyUI's sampling shift is mu = ln(6.93).
+shift = 6.93
+
+[adapter]
+type = 'lora'
+rank = 32
+dtype = 'bfloat16'
+
+[optimizer]
+type = 'automagic'
+weight_decay = 0.01

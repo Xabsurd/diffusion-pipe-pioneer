@@ -14,7 +14,16 @@ path = '/home/anon/data/images/kontext/target'
 # Every target image must have a corresponding control image or it will fail.
 control_path = '/home/anon/data/images/kontext/control'
 
+# Several reference images: one directory per reference, matched by filename stem.
+# Do not set control_path and control_paths together.
+# Qwen-Image-2.1 and FLUX 3 Klein need the same reference count in every directory of one run.
+# control_paths = [
+#     '/home/anon/data/images/kontext/ref_a',
+#     '/home/anon/data/images/kontext/ref_b',
+# ]
+
 # You can train on normal t2i datasets at the same time. But they have to be in a different directory.
+# Qwen-Image-2.1 and FLUX 3 Klein cannot mix text-to-image directories with edit directories.
 
 # [[directory]]
 # path = '/home/anon/data/images/normal_t2i_dataset'

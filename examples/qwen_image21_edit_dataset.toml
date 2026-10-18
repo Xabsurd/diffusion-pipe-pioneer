@@ -1,0 +1,23 @@
+# Qwen-Image-2.1 edit dataset.
+# uncond_fraction in the training config must be 0.
+# Every directory in this file must list the same number of reference images.
+# Regenerate the text-embedding cache after captions or references change.
+# References are cropped to the target size bucket. Keep their aspect ratio close to the target.
+# The text encoder sees each reference at edit_vlm_resolution (model config, default 1024).
+
+resolutions = [512]
+enable_ar_bucket = true
+min_ar = 0.5
+max_ar = 2.0
+num_ar_buckets = 9
+num_repeats = 1
+
+[[directory]]
+path = '/home/anon/data/images/qwen21_edit/target'
+# One reference:
+# control_path = '/home/anon/data/images/qwen21_edit/control'
+# Or several, matched by filename stem:
+control_paths = [
+    '/home/anon/data/images/qwen21_edit/ref_a',
+    '/home/anon/data/images/qwen21_edit/ref_b',
+]
