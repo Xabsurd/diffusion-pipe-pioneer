@@ -1,6 +1,8 @@
 # 维护分支
 
-分支名：`maintained/edit-and-new-models`。
+分支名：`diffusion-pipe-pioneer`。
+
+GitHub：<https://github.com/Xabsurd/diffusion-pipe-pioneer>
 
 这个分支在上游 [tdrussell/diffusion-pipe](https://github.com/tdrussell/diffusion-pipe) 的 `main` 之上，多了上游还没有的训练功能。新模型尽量放在单独文件里，共享文件只加一小段挂钩，这样合并上游时冲突面小。
 
