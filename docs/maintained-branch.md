@@ -4,14 +4,16 @@
 
 GitHub：<https://github.com/Xabsurd/diffusion-pipe-pioneer>
 
-这个分支在上游 [tdrussell/diffusion-pipe](https://github.com/tdrussell/diffusion-pipe) 的 `main` 之上，多了上游还没有的训练功能。新模型尽量放在单独文件里，共享文件只加一小段挂钩，这样合并上游时冲突面小。
+这个分支基于上游 [tdrussell/diffusion-pipe](https://github.com/tdrussell/diffusion-pipe) 的 `main`，维护新模型、参考图编辑训练和训练兼容性、性能修复，并持续同步上游。新模型尽量放在单独文件里，共享文件只加一小段挂钩，这样合并上游时冲突面小。
 
-## 相对上游多出来的功能
+## 本分支的新增功能和修复
 
 - Qwen-Image-2.1 图片编辑。`control_path` 是一张参考图，`control_paths` 是多张。文本编码器会记下每张参考图插入文本的位置，DiT 把参考图 latent 嵌进这个位置，损失只算目标图。
 - FLUX 3 Klein。`type = 'flux3'`。文生图，以及最多 10 张参考图。参考图留在 latent 里，不进文本编码器。
 - MOSS-Image。`type = 'moss_image'`。目前只有文生图。
 - Qwen-Image 和 Flux 2 也可以用 `control_paths` 做多参考图。
+- Qwen-Image-2.1 量化训练：归一化和调制保留 FP32，在线性层前恢复计算精度，避免 Q/K/V 和 MLP 投影的 INT8 权重在前向中反量化。
+- Block swap 支持量化权重与普通权重混用，并避免重复搬运 PEFT 共享的同一份权重。
 
 示例配置：
 
@@ -81,4 +83,4 @@ git -c safe.directory="$(pwd)/submodules/ComfyUI" submodule update --init submod
 
 不要改 git config。这个工作树如果报 `dubious ownership`，每次调用子模块 git 时加上 `git -c safe.directory=...`，脚本里已经这么写了。
 
-合并之后看一眼 `README.md` 的 Recent changes。那里有一条指向本文的记录，上游如果也改了同一段，冲突会落在这个小地方，而不是散在模型文件里。
+合并之后检查 `README.md` 的变更记录。`Upstream change log` 保留上游历史，本分支的新增功能和修复写入 `Branch change log`，不要混在同一列表。

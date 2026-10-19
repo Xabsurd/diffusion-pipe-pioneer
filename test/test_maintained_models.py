@@ -109,6 +109,44 @@ class QwenImage21EditTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             layer.forward(inputs)
 
+    def test_quantized_linears_receive_compute_dtype_after_norm(self):
+        from types import SimpleNamespace
+
+        class FloatNorm(nn.Module):
+            def forward(self, x):
+                # CUDA autocast computes LayerNorm in FP32.
+                return F.layer_norm(x.float(), (256,))
+
+        from torch.nn import functional as F
+        ops = comfy.ops.mixed_precision_ops(compute_dtype=torch.bfloat16)
+        linears = [ops.Linear(256, 256, bias=False, device='cpu') for _ in range(2)]
+        conf = torch.tensor(list(b'{"format":"int8_tensorwise"}'), dtype=torch.uint8)
+        for layer in linears:
+            layer.load_state_dict({
+                'weight': torch.randint(-64, 64, (256, 256), dtype=torch.int8),
+                'weight_scale': torch.full((256, 1), 0.001),
+                'comfy_quant': conf,
+            })
+        seen = []
+
+        def record(layer):
+            def forward(x, *args):
+                seen.append(x.dtype)
+                return layer(x)
+            return forward
+
+        block = SimpleNamespace(img_norm1=FloatNorm(), img_norm2=FloatNorm(),
+                                attn=record(linears[0]), img_mlp=record(linears[1]))
+        x = torch.randn(1, 6, 256, dtype=torch.bfloat16, requires_grad=True)
+        zero = torch.zeros(1, 1, 256, dtype=torch.bfloat16)
+        one = torch.ones_like(zero)
+        mod = ((zero, zero), (one, one), (zero, zero), (one, one), zero)
+        out = qwen_image21.training_qwen21_block(block, x, mod, None, None, 2, {})
+        out.float().square().mean().backward()
+        self.assertEqual(seen, [torch.bfloat16, torch.bfloat16])
+        self.assertEqual(out.dtype, torch.bfloat16)
+        self.assertTrue(bool(torch.isfinite(x.grad).all()))
+
     def test_gated_residual_is_out_of_place(self):
         x = torch.randn(1, 6, 4, requires_grad=True)
         y = torch.randn(1, 6, 4, requires_grad=True)

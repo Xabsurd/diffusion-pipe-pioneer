@@ -1,20 +1,49 @@
-# diffusion-pipe
-A pipeline parallel training script for diffusion models.
+# diffusion-pipe-pioneer
 
-Models supported: SDXL, Flux, LTX-Video, HunyuanVideo (t2v), Cosmos, Lumina Image 2.0, Wan2.1 (t2v and i2v), Chroma, HiDream, Stable Diffusion 3, Cosmos-Predict2, OmniGen2, Flux Kontext, Wan2.2, Qwen-Image, Qwen-Image-Edit, HunyuanImage-2.1, AuraFlow, Z-Image, HunyuanVideo-1.5, Flux 2 (Dev and Klein), Anima, Ernie-Image, LTX 2.3, Ideogram4, Krea 2, MiniMax H3, Qwen-Image-2.1 (T2I and edit), Flux 3 Klein, MOSS-Image.
+A maintained fork of [tdrussell/diffusion-pipe](https://github.com/tdrussell/diffusion-pipe), the upstream pipeline-parallel training script for diffusion models.
 
-## Features
+## Purpose of this branch
+
+This branch provides early support for new models, reference-image edit training, and targeted training compatibility and performance fixes while continuing to track upstream. The training pipeline and existing model support come from the upstream project; additions maintained here and upstream changes are listed separately below.
+
+See [the upstream repository](https://github.com/tdrussell/diffusion-pipe) for the original project and [maintenance notes](docs/maintained-branch.md) for this branch's model limitations, dependency versions, and sync procedure.
+
+## Changes maintained in this branch
+
+- Qwen-Image-2.1 reference-image edit training, including multiple reference images.
+- FLUX 3 Klein Base training, with text-to-image and reference-image edit support.
+- MOSS-Image Base text-to-image training.
+- Multiple reference images for Qwen-Image and Flux 2 through `control_paths`.
+- A newer ComfyUI submodule and pinned dependencies for the added model integrations.
+- Qwen-Image-2.1 INT8 training fix: preserve FP32 normalization, then restore the compute dtype before linear layers so quantized weights do not fall back to floating-point forward computation.
+- Block-swap fixes for mixed quantized/plain weights and shared PEFT weight aliases.
+
+### Branch change log
+
+- 2026-10-19
+  - Fix Qwen-Image-2.1 INT8 forward fallback after normalization. On an RTX 3090, a short 1024-resolution LoRA test (rank 32, batch size 1, activation checkpointing, no block swap; 3 warmup and 12 timed steps) improved INT8 from 4.20 to 3.44 seconds/step and ConvRot INT8 from 4.22 to 3.47 seconds/step. BF16 improved from 4.46 to 4.20 seconds/step. Per-step INT8 calls increased from 97 to 289.
+  - Fix block swapping between quantized and plain weights, and avoid swapping aliased PEFT weights twice.
+- 2026-10-18
+  - Add Qwen-Image-2.1 edit, FLUX 3 Klein, MOSS-Image, and multiple-reference-image training. Configuration examples and limitations are in [docs/maintained-branch.md](docs/maintained-branch.md).
+
+## Upstream project
+
+The features and change log in this section are inherited from [tdrussell/diffusion-pipe](https://github.com/tdrussell/diffusion-pipe).
+
+Upstream model support at this branch's base: SDXL, Flux, LTX-Video, HunyuanVideo (t2v), Cosmos, Lumina Image 2.0, Wan2.1 (t2v and i2v), Chroma, HiDream, Stable Diffusion 3, Cosmos-Predict2, OmniGen2, Flux Kontext, Wan2.2, Qwen-Image, Qwen-Image-Edit, HunyuanImage-2.1, AuraFlow, Z-Image, HunyuanVideo-1.5, Flux 2 (Dev and Klein), Anima, Ernie-Image, LTX 2.3, Ideogram4, Krea 2, MiniMax H3, and Qwen-Image-2.1 (T2I).
+
+### Upstream features
+
 - Pipeline parallelism, for training models larger than can fit on a single GPU
 - Useful metrics logged to Tensorboard
 - Compute metrics on a held-out eval set, for measuring generalization
 - Training state checkpointing and resuming from checkpoint
 - Efficient multi-process, multi-GPU pre-caching of latents and text embeddings
-- Seemlessly supports both image and video models in a unified way
+- Seamlessly supports both image and video models in a unified way
 - Easily add new models by implementing a single subclass
 
-## Recent changes
-- 2026-10-18
-  - Maintained branch: Qwen-Image-2.1 edit, FLUX 3 Klein, MOSS-Image, and multiple reference images. Sync notes are in [docs/maintained-branch.md](docs/maintained-branch.md).
+### Upstream change log
+
 - 2026-09-28
   - Support Qwen-Image-2.1 (T2I training only).
 - 2026-08-08
@@ -48,7 +77,8 @@ It will be difficult or impossible to make training work on native Windows. This
 ## Installing
 Clone the repository:
 ```
-git clone --recurse-submodules https://github.com/tdrussell/diffusion-pipe
+git clone --recurse-submodules --branch diffusion-pipe-pioneer https://github.com/Xabsurd/diffusion-pipe-pioneer.git
+cd diffusion-pipe-pioneer
 ```
 
 If you alread cloned it and forgot to do --recurse-submodules:
@@ -156,4 +186,4 @@ This caching also means that training LoRAs for text encoders is not currently s
 Three flags are relevant for caching. ```--cache_only``` does the caching flow, then exits without training anything. ```--regenerate_cache``` forces cache regeneration. ```--trust_cache``` will blindly load the cached metadata files, without checking if any data files have changed via the fingerprint. This can speed up loading for very large datasets (100,000+ images), but you must make sure nothing in the dataset has changed.
 
 ## Extra
-You can check out my [qlora-pipe](https://github.com/tdrussell/qlora-pipe) project, which is basically the same thing as this but for LLMs.
+You can check out the upstream author's [qlora-pipe](https://github.com/tdrussell/qlora-pipe) project, which is basically the same thing as this but for LLMs.

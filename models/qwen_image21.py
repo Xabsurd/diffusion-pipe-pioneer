@@ -29,12 +29,13 @@ def _training_gated_residual(x, y, gate, prefix_len):
 
 def training_qwen21_block(block, x, mod, pe, attn_fn, prefix_len, transformer_options):
     scale1, gate1, scale2, gate2, zero = mod
-    attn_out = block.attn(
-        _modulated_norm(block.img_norm1, x, scale1, prefix_len, zero),
-        pe, attn_fn, prefix_len, transformer_options,
-    )
+    # Autocast promotes LayerNorm to FP32. Cast after modulation, just as the
+    # following BF16 linear would, so Comfy does not dequantize INT8 weights.
+    attn_input = _modulated_norm(block.img_norm1, x, scale1, prefix_len, zero).to(x.dtype)
+    attn_out = block.attn(attn_input, pe, attn_fn, prefix_len, transformer_options)
     x = _training_gated_residual(x, attn_out, gate1, prefix_len)
-    mlp_out = block.img_mlp(_modulated_norm(block.img_norm2, x, scale2, prefix_len, zero))
+    mlp_input = _modulated_norm(block.img_norm2, x, scale2, prefix_len, zero).to(x.dtype)
+    mlp_out = block.img_mlp(mlp_input)
     x = _training_gated_residual(x, mlp_out, gate2, prefix_len)
     if x.dtype == torch.float16:
         x = x.clamp(-65504, 65504)
