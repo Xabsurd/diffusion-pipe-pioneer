@@ -15,6 +15,49 @@ from utils.common import AUTOCAST_DTYPE, get_lin_function, time_shift
 from utils.offloading import ModelOffloader
 
 
+def _batched_text_rope(llama, position_ids):
+    """One 1D RoPE row per caption.
+
+    Qwen3-VL interleaved MRoPE reads position_ids.shape[0] as the three T/H/W
+    axes. Flux3 text positions are (batch, sequence), so that read is only
+    valid for a single caption.
+    """
+    pieces = [llama.compute_freqs_cis(row.unsqueeze(0), row.device) for row in position_ids]
+    first = pieces[0]
+    if isinstance(first, list):
+        return [
+            tuple(torch.cat([piece[axis][part] for piece in pieces], dim=0) for part in range(3))
+            for axis in range(len(first))
+        ]
+    return tuple(torch.cat([piece[part] for piece in pieces], dim=0) for part in range(3))
+
+
+def _install_flux3_text_rope_batch_fix():
+    import comfy.text_encoders.flux as flux_text
+
+    cls = flux_text.Flux3Qwen3VL
+    if getattr(cls.forward, '_flux3_batched_text_rope', False):
+        return
+    original = cls.forward
+
+    def forward(self, input_ids, attention_mask=None, **kwargs):
+        if attention_mask is not None and kwargs.get('freqs_cis') is None:
+            # Same positions as Flux3Qwen3VL: real tokens follow the mask
+            # cumsum, and padding stays at rope position 1.
+            position_ids = (attention_mask.cumsum(-1) - 1).masked_fill(attention_mask == 0, 1)
+            if position_ids.ndim == 1:
+                position_ids = position_ids.unsqueeze(0)
+            if position_ids.shape[0] != 1:
+                kwargs['freqs_cis'] = _batched_text_rope(self.model, position_ids)
+        return original(self, input_ids, attention_mask=attention_mask, **kwargs)
+
+    forward._flux3_batched_text_rope = True
+    cls.forward = forward
+
+
+_install_flux3_text_rope_batch_fix()
+
+
 def training_block_forward(block, x, spans, pe, transformer_options=None):
     """Flux3 Block.forward without in-place residuals, so autograd can see every row."""
     if transformer_options is None:

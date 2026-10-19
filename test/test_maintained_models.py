@@ -242,6 +242,66 @@ class DatasetRuleTests(unittest.TestCase):
         self.assertEqual(qwen_image21._control_files_for_batch(nested, 2), nested)
 
 
+class Flux3TextRopeTests(unittest.TestCase):
+    def _llama(self):
+        from comfy.text_encoders.llama import precompute_freqs_cis
+
+        class _Llama:
+            def compute_freqs_cis(self, position_ids, device):
+                return precompute_freqs_cis(
+                    128, position_ids, 5000000.0,
+                    rope_dims=[24, 20, 20], interleaved_mrope=True, device=device,
+                )
+
+        return _Llama()
+
+    def _positions(self, rows):
+        mask = torch.tensor(rows, dtype=torch.long)
+        return (mask.cumsum(-1) - 1).masked_fill(mask == 0, 1)
+
+    def test_batched_captions_keep_per_row_text_rope(self):
+        from comfy.text_encoders.llama import apply_rope, precompute_freqs_cis
+
+        llama = self._llama()
+        position_ids = self._positions([
+            [1, 1, 1, 1, 0, 0],
+            [1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1],
+            [1, 0, 0, 0, 0, 0],
+        ])
+        with self.assertRaises(IndexError):
+            precompute_freqs_cis(
+                128, position_ids[:2], 5000000.0,
+                rope_dims=[24, 20, 20], interleaved_mrope=True,
+            )
+        wrong = precompute_freqs_cis(
+            128, position_ids, 5000000.0,
+            rope_dims=[24, 20, 20], interleaved_mrope=True,
+        )
+        batched = flux3._batched_text_rope(llama, position_ids)
+        singles = [llama.compute_freqs_cis(row.unsqueeze(0), row.device) for row in position_ids]
+        for part in range(3):
+            expected = torch.cat([row[part] for row in singles], dim=0)
+            self.assertTrue(torch.equal(batched[part], expected))
+            self.assertFalse(torch.equal(batched[part], wrong[part]))
+
+        q = torch.randn(4, 2, position_ids.shape[1], 128)
+        k = torch.randn_like(q)
+        q_batched, k_batched = apply_rope(q, k, batched)
+        q_rows = []
+        k_rows = []
+        for i, single in enumerate(singles):
+            q_i, k_i = apply_rope(q[i:i + 1], k[i:i + 1], single)
+            q_rows.append(q_i)
+            k_rows.append(k_i)
+        self.assertTrue(torch.allclose(q_batched, torch.cat(q_rows, dim=0)))
+        self.assertTrue(torch.allclose(k_batched, torch.cat(k_rows, dim=0)))
+
+    def test_flux3_text_encoder_uses_the_batch_fix(self):
+        from comfy.text_encoders.flux import Flux3Qwen3VL
+        self.assertTrue(getattr(Flux3Qwen3VL.forward, '_flux3_batched_text_rope', False))
+
+
 class ImportTests(unittest.TestCase):
     def test_comfy_models_import(self):
         from comfy.ldm.flux3.model import Flux3
