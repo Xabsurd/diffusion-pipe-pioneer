@@ -33,17 +33,6 @@ class _QwenStub(nn.Module):
         self.pe_embedder = _Pe()
 
 
-class _MossStub(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.video_embedder = nn.Identity()
-        self.text_embedder = nn.Identity()
-        self.time_embedding = nn.Identity()
-        self.shared_block_modulation = nn.Identity()
-        self.video_head_modulation = nn.Identity()
-        self.pe_embedder = EmbedND(dim=8, theta=10000, axes_dim=[2, 2, 2, 2])
-
-
 def _qwen_layer():
     return qwen_image21.InitialLayer(_QwenStub())
 
@@ -199,10 +188,10 @@ class Flux3Tests(unittest.TestCase):
 
 
 class MossTests(unittest.TestCase):
-    def test_rope_length_matches_image_plus_text(self):
-        layer = moss_image.InitialLayer(_MossStub())
-        pe = layer._rope(2, 3, 4, torch.device('cpu'))
-        self.assertEqual(pe.shape[1], 2 * 3 + 4)
+    def test_upstream_blocks_are_lora_targets(self):
+        self.assertIn('Block', moss_image.MossImagePipeline.adapter_target_modules)
+        self.assertIn('TextBlock', moss_image.MossImagePipeline.adapter_target_modules)
+        self.assertTrue(hasattr(moss_image, 'attention'))
 
 
 class DatasetRuleTests(unittest.TestCase):

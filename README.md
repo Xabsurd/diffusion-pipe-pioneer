@@ -20,6 +20,8 @@ See [the upstream repository](https://github.com/tdrussell/diffusion-pipe) for t
 
 ### Branch change log
 
+- 2026-10-20
+  - Merge upstream through `558fe6f`. MOSS-Image training follows the upstream implementation, and this branch still rejects reference-image datasets. ComfyUI is pinned at `6607f36`.
 - 2026-10-19
   - Fix Qwen-Image-2.1 INT8 forward fallback after normalization. On an RTX 3090, a short 1024-resolution LoRA test (rank 32, batch size 1, activation checkpointing, no block swap; 3 warmup and 12 timed steps) improved INT8 from 4.20 to 3.44 seconds/step and ConvRot INT8 from 4.22 to 3.47 seconds/step. BF16 improved from 4.46 to 4.20 seconds/step. Per-step INT8 calls increased from 97 to 289.
   - Fix block swapping between quantized and plain weights, and avoid swapping aliased PEFT weights twice.
@@ -30,7 +32,7 @@ See [the upstream repository](https://github.com/tdrussell/diffusion-pipe) for t
 
 The features and change log in this section are inherited from [tdrussell/diffusion-pipe](https://github.com/tdrussell/diffusion-pipe).
 
-Upstream model support at this branch's base: SDXL, Flux, LTX-Video, HunyuanVideo (t2v), Cosmos, Lumina Image 2.0, Wan2.1 (t2v and i2v), Chroma, HiDream, Stable Diffusion 3, Cosmos-Predict2, OmniGen2, Flux Kontext, Wan2.2, Qwen-Image, Qwen-Image-Edit, HunyuanImage-2.1, AuraFlow, Z-Image, HunyuanVideo-1.5, Flux 2 (Dev and Klein), Anima, Ernie-Image, LTX 2.3, Ideogram4, Krea 2, MiniMax H3, and Qwen-Image-2.1 (T2I).
+Upstream model support now includes MOSS-Image, through `558fe6f`: SDXL, Flux, LTX-Video, HunyuanVideo (t2v), Cosmos, Lumina Image 2.0, Wan2.1 (t2v and i2v), Chroma, HiDream, Stable Diffusion 3, Cosmos-Predict2, OmniGen2, Flux Kontext, Wan2.2, Qwen-Image, Qwen-Image-Edit, HunyuanImage-2.1, AuraFlow, Z-Image, HunyuanVideo-1.5, Flux 2 (Dev and Klein), Anima, Ernie-Image, LTX 2.3, Ideogram4, Krea 2, MiniMax H3, Qwen-Image-2.1, and MOSS-Image.
 
 ### Upstream features
 
@@ -44,6 +46,10 @@ Upstream model support at this branch's base: SDXL, Flux, LTX-Video, HunyuanVide
 
 ### Upstream change log
 
+- 2026-10-18
+  - Support MOSS-Image.
+  - Fix Qwen-Image-2.1 for the newest ComfyUI.
+  - Fix AdamW8bitKahan for current bitsandbytes. GenericOptim can use Sinkhorn normalization.
 - 2026-09-28
   - Support Qwen-Image-2.1 (T2I training only).
 - 2026-08-08
@@ -67,9 +73,6 @@ Upstream model support at this branch's base: SDXL, Flux, LTX-Video, HunyuanVide
   - Support Ernie-Image.
 - 2026-02-04
   - Support Anima.
-- 2026-01-16
-  - Support Flux 2, both Dev and Klein.
-  - Updated DeepSpeed version. Should probably update all requirements: `pip install -r requirements.txt -U`.
 
 ## Windows support
 It will be difficult or impossible to make training work on native Windows. This is because Deepspeed only has [partial Windows support](https://github.com/microsoft/DeepSpeed/blob/master/blogs/windows/08-2024/README.md). Deepspeed is a hard requirement because the entire training script is built around Deepspeed pipeline parallelism. However, it will work on Windows Subsystem for Linux, specifically WSL 2. If you must use Windows I recommend trying WSL 2.

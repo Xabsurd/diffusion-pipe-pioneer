@@ -701,18 +701,15 @@ This model is only in the ComfyUI commit pinned by this branch. See [docs/mainta
 ```
 [model]
 type = 'moss_image'
-# MOSS-Image-Base. Not the SFT checkpoint.
-diffusion_model = '/home/anon/ComfyUI/models/diffusion_models/moss_image_base.safetensors'
-vae = '/home/anon/ComfyUI/models/vae/flux2-vae.safetensors'
+# MOSS-Image-Base, full bf16. Not an int8-convrot checkpoint.
+diffusion_model = '/data2/imagegen_models/comfyui-models/moss_image_base_bf16.safetensors'
+vae = '/data2/imagegen_models/comfyui-models/flux2-vae.safetensors'
 text_encoders = [
-    {path = '/home/anon/ComfyUI/models/text_encoders/qwen3.5_9b_bf16.safetensors', type = 'moss_image'}
+    {path = '/data2/imagegen_models/comfyui-models/qwen3.5_9b_bf16.safetensors', type = 'moss_image'}
 ]
 dtype = 'bfloat16'
-diffusion_model_dtype = 'float8'
 timestep_sample_method = 'logit_normal'
-shift = 5
+shift = 3
 ```
 
-MOSS-Image-Base is text-to-image only. This release has no reference-image path, and setting `control_path` or `control_paths` is an error. The text encoder is Qwen3.5-9B (about 19GB in bf16). Cache it, then let the trainer unload it. The diffusion model uses the FLUX.2 VAE. Sampling for the base model is about CFG 3 and 50 steps. Saved LoRAs use the ComfyUI key prefix.
-
-This model is only in the ComfyUI commit pinned by this branch. See [docs/maintained-branch.md](maintained-branch.md).
+The int8-convrot format will NOT work right for training LoRAs. Loss just goes up sharply. It only happens on this model. You need the full bf16. `diffusion_model_dtype = 'float8'` probably works if you need the VRAM savings, but it will have some quality loss and has not been tested here. This branch also rejects `control_path` and `control_paths`: the release is text-to-image only. All input models and saved models are in ComfyUI format.

@@ -34,13 +34,13 @@ LoRA 仍然按 ComfyUI 的格式保存，键名带 `diffusion_model.` 前缀。
 - Qwen-Image-2.1 是 CFG 蒸馏模型。这个分支没有加去蒸馏适配器。需要的话继续用原来的 `merge_adapters`。不加的话，推理时要用 CFG。
 - FLUX 3 要训练 Klein Base。带 `ref_time_in` 的 step-distilled 权重会被拒绝。Base 上训出来的 LoRA 之后可以挂到蒸馏模型上。
 - FLUX 3 的 `shift` 是乘数形式，默认 `6.93`。ComfyUI 采样配置里写的是 `mu = ln(6.93)`，不要把那个数直接抄过来。
-- MOSS-Image 训练 Base，不要拿 SFT 权重当 Base 用。`shift = 5`。这个版本没有编辑路径，写了 `control_path` 或 `control_paths` 会报错。
+- MOSS-Image 训练 Base 的 bf16 权重。INT8 ConvRot 上训 LoRA 损失会急剧上升，上游已经拒绝这种量化权重。`shift` 用配置里的值，上游示例是 3，本分支示例是 5。这个版本没有编辑路径，写了 `control_path` 或 `control_paths` 会报错。
 - FLUX 3 的文本编码器是 Qwen3-VL-4B，MOSS-Image 的是 Qwen3.5-9B（bf16 大约 19GB）。先缓存文本嵌入，训练开始后文本编码器会被卸掉。
 - Flux 2 的参考图 latent 只在缓存时做一次 `process_in`。以前 `prepare_inputs` 里还有一次缩放，但它依赖一个并不存在的 `model_patcher`，那条路径实际上跑不起来。
 
 ## ComfyUI 子模块
 
-这个分支把 `submodules/ComfyUI` 钉在 `c06bf5f569d268b80076e5f44126f87cdf835869`（2026-10-17，`Bump comfyui-frontend-package to 1.55.18`）。上游当时的钉点还没有 Flux 3 和 MOSS-Image，所以这里故意超前。
+这个分支把 `submodules/ComfyUI` 钉在 `6607f36b53c7b695b160ac5b52d595e9e3752a2d`（2026-10-18，`Fix webcam node no longer working`）。这是当前上游指针，比原先的 `c06bf5f` 新，并且仍然包含 Flux 3 和 MOSS-Image。
 
 这个提交需要：
 
