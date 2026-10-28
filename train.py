@@ -709,13 +709,6 @@ if __name__ == '__main__':
             klass = getattr(pytorch_optimizer, optim_type)
 
         if optim_config.get('gradient_release', False):
-            # Prevent deepspeed from logging every single param group lr
-            def _report_progress(self, step):
-                lr = self.get_lr()
-                mom = self.get_mom()
-                deepspeed.utils.logging.log_dist(f"step={step}, skipped={self.skipped_steps}, lr={lr[0]}, mom={mom[0]}", ranks=[0])
-            deepspeed.runtime.engine.DeepSpeedEngine._report_progress = _report_progress
-
             # Deepspeed executes all the code to reduce grads across data parallel ranks even if the DP world size is 1.
             # As part of this, any grads that are None are set to zeros. We're doing gradient release to save memory,
             # so we have to avoid this.
@@ -854,6 +847,23 @@ if __name__ == '__main__':
 
     train_dataloader = dataset_util.PipelineDataLoader(train_data, model_engine, model_engine.gradient_accumulation_steps(), model)
     steps_per_epoch = len(train_dataloader) // model_engine.gradient_accumulation_steps()
+    total_steps = config['epochs'] * steps_per_epoch
+    if 'max_steps' in config:
+        total_steps = min(total_steps, config['max_steps'])
+
+    # Installed after the dataloader exists so the line can include the run length.
+    # Gradient release logs one param group; logging every group floods the step line.
+    def _report_progress(self, step):
+        lr = self.get_lr()
+        mom = self.get_mom()
+        if config['optimizer'].get('gradient_release', False):
+            lr = lr[0]
+            mom = mom[0]
+        deepspeed.utils.logging.log_dist(
+            f"step={step}, total={total_steps}, skipped={self.skipped_steps}, lr={lr}, mom={mom}",
+            ranks=[0],
+        )
+    deepspeed.runtime.engine.DeepSpeedEngine._report_progress = _report_progress
 
     scheduler_type = config.get('lr_scheduler', 'constant')
     if scheduler_type == 'constant':
