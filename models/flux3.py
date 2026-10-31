@@ -97,7 +97,7 @@ def training_block_forward(block, x, spans, pe, transformer_options=None):
 
 class Flux3Pipeline(ComfyPipeline):
     name = 'flux3'
-    checkpointable_layers = ['SingleTransformerLayer']
+    checkpointable_layers = ['InitialLayer', 'SingleTransformerLayer']
     adapter_target_modules = ['Block']
     keep_in_high_precision = ['emb_in', 'txt_in', 'time_in', 'ref_time_in', 'early_stream_modulations', 'single_stream_modulations', 'final_layer']
     spatial_compression = 16
