@@ -15,6 +15,7 @@ import comfy.ldm.moss_image.model
 from comfy.ldm.moss_image.model import modulated_rms_norm, rope_split_half, situ, gated_residual
 from comfy.ldm.modules.attention import AttentionTensorContainer, optimized_attention, ComfyAttention
 import comfy.model_prefetch
+from models.moss_tile import MossTileMixin, pack_tile_tokens
 
 
 def attention(q, k, v, q_norm, k_norm, pe, heads, comfy_attention, transformer_options, mask=None):
@@ -113,7 +114,7 @@ class Block(nn.Module):
 comfy.ldm.moss_image.model.Block = Block
 
 
-class MossImagePipeline(ComfyPipeline):
+class MossImagePipeline(MossTileMixin, ComfyPipeline):
     name = 'moss_image'
     spatial_compression = 16
     channels = 128
@@ -127,9 +128,17 @@ class MossImagePipeline(ComfyPipeline):
         self.offloader = ModelOffloader('dummy', [], 0, 0, True, torch.device('cuda'), False, debug=False)
 
     def model_specific_dataset_config_validation(self, dataset_config):
+        tile = self.model_config.get('control_adapter') == 'tile'
         for directory_config in dataset_config['directory']:
-            if 'control_path' in directory_config or 'control_paths' in directory_config:
-                raise RuntimeError('MOSS-Image training is text-to-image only. Reference-image editing is not in this release.')
+            has_control = 'control_path' in directory_config or 'control_paths' in directory_config
+            if has_control and not tile:
+                raise RuntimeError(
+                    "MOSS-Image training is text-to-image only unless [model] control_adapter = 'tile'."
+                )
+            if tile and 'control_path' not in directory_config:
+                raise RuntimeError('Tile control training requires control_path on every dataset directory.')
+            if 'control_paths' in directory_config:
+                raise RuntimeError('Tile control uses one control_path, not control_paths.')
 
     def to_layers(self):
         diffusion_model = self.diffusion_model
@@ -205,7 +214,15 @@ class MossImagePipeline(ComfyPipeline):
         noisy_latents = (1 - t_expanded) * latents + t_expanded * noise
         target = noise - latents
 
-        return (noisy_latents, t, *self.get_conds(inputs)), (target, mask)
+        extra = ()
+        if self.model_config.get('control_adapter') == 'tile':
+            if 'control_latents' not in inputs:
+                raise RuntimeError('tile control training requires control_path on every dataset directory')
+            control = inputs['control_latents'].float()
+            if control.shape != latents.shape:
+                raise RuntimeError(f'control latents {tuple(control.shape)} != target latents {tuple(latents.shape)}')
+            extra = (control,)
+        return (noisy_latents, t, *self.get_conds(inputs)) + extra, (target, mask)
 
     def enable_block_swap(self, blocks_to_swap):
         diffusion_model = self.diffusion_model
@@ -253,7 +270,7 @@ class InitialLayer(nn.Module):
         for item in inputs:
             if torch.is_floating_point(item):
                 item.requires_grad_(True)
-        x, timestep, context, context_mask = inputs
+        x, timestep, context, context_mask, *extra = inputs
 
         B, _, H, W = x.shape
         dtype, device = x.dtype, x.device
@@ -266,7 +283,10 @@ class InitialLayer(nn.Module):
         text_mask = context_mask[:, None, None, :]
         txt = self.text_embedder(context, pe[:, H * W:], text_mask)
         # allocated outside the memory compiler region, the blocks update it in place
-        x = torch.cat((self.video_embedder(x.flatten(2).transpose(1, 2)), txt), dim=1)
+        tokens = x.flatten(2).transpose(1, 2)
+        if extra:
+            tokens = pack_tile_tokens(tokens, extra[0])
+        x = torch.cat((self.video_embedder(tokens), txt), dim=1)
         del txt
         sizes = torch.tensor([H, W], dtype=torch.int32, device=device)
 
