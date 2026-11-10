@@ -50,6 +50,17 @@ class TileVideoEmbedder(nn.Module):
         return self.base.bias.detach().contiguous()
 
 
+def split_merged_embedder(weight: torch.Tensor, bias: torch.Tensor | None = None):
+    """Split a ComfyUI 384-column video_embedder back into base and control columns."""
+    control_columns = LATENT_CHANNELS * CONTROL_SLOTS
+    expected = LATENT_CHANNELS + control_columns
+    if weight.ndim != 2 or weight.shape[1] != expected:
+        raise ValueError(f"expected video_embedder weight [dim, {expected}], got {tuple(weight.shape)}")
+    base_weight = weight[:, :LATENT_CHANNELS].contiguous()
+    control_weight = weight[:, LATENT_CHANNELS:].contiguous()
+    return base_weight, control_weight, bias
+
+
 def pack_tile_tokens(noisy_tokens: torch.Tensor, control_latents: torch.Tensor) -> torch.Tensor:
     """noisy_tokens is [B, HW, 128]. control_latents is [B, 128, H, W]."""
     control_tokens = control_latents.flatten(2).transpose(1, 2)

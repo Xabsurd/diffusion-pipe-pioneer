@@ -1,0 +1,52 @@
+# MOSS-Image tile control.
+# The condition files are an offline degradation of the targets. The trainer
+# caches those files with the VAE. It does not synthesize a new degradation
+# on each step.
+# ComfyUI: load the saved safetensors with the normal LoRA loader, then
+# MOSS-Image Color/Depth Control. Connect the upscaled image to color_map
+# and leave depth_map empty.
+
+output_dir = '/path/to/output/moss-tile-control'
+dataset = 'examples/moss_tile_dataset.toml'
+
+epochs = 6
+# max_steps = 1000
+micro_batch_size_per_gpu = 1
+pipeline_stages = 1
+gradient_accumulation_steps = 1
+gradient_clipping = 1.0
+warmup_steps = 200
+lr_scheduler = 'linear'
+lr_scheduler_end_lr = 2e-5
+
+save_every_n_epochs = 1
+checkpoint_every_n_minutes = 120
+activation_checkpointing = true
+partition_method = 'parameters'
+save_dtype = 'bfloat16'
+caching_batch_size = 1
+steps_per_print = 1
+
+[model]
+type = 'moss_image'
+diffusion_model = '/path/to/moss_image_base_bf16.safetensors'
+vae = '/path/to/flux2-vae.safetensors'
+text_encoders = [
+    {path = '/path/to/qwen3.5_9b_bf16.safetensors', type = 'moss_image'}
+]
+dtype = 'bfloat16'
+timestep_sample_method = 'logit_normal'
+shift = 3
+control_adapter = 'tile'
+control_lr_multiplier = 10
+
+[adapter]
+type = 'lora'
+rank = 32
+dtype = 'bfloat16'
+
+[optimizer]
+type = 'adamw_optimi'
+lr = 2e-4
+betas = [0.9, 0.99]
+weight_decay = 0.01

@@ -158,3 +158,49 @@ def sample_t(t, batch_size, quantile=None):
     else:
         i = torch.randint(0, len(t), size=(batch_size,))
     return t[i]
+
+def linear_scheduler_steps(config, steps_per_epoch):
+    """Return (end_factor, decay_steps) for the linear schedule.
+
+    Without max_steps or lr_scheduler_end_lr, decay_steps stays epochs * steps_per_epoch.
+    max_steps caps the run. With an end learning rate, decay starts after warmup and
+    reaches that floor on the last step of the capped run.
+    """
+    budget = config['epochs'] * steps_per_epoch
+    capped = 'max_steps' in config
+    if capped:
+        budget = min(budget, config['max_steps'])
+    end_factor = 0.0
+    decay_steps = budget
+    if 'lr_scheduler_end_lr' in config:
+        initial_lr = config['optimizer']['lr']
+        end_lr = config['lr_scheduler_end_lr']
+        if not 0 <= end_lr <= initial_lr or initial_lr <= 0:
+            raise ValueError('lr_scheduler_end_lr must be between 0 and optimizer.lr, with optimizer.lr > 0')
+        end_factor = end_lr / initial_lr
+        decay_steps = budget - config.get('warmup_steps', 0)
+        if decay_steps <= 0:
+            raise ValueError('warmup_steps must be less than the total training steps')
+    elif capped:
+        decay_steps = budget - config.get('warmup_steps', 0)
+        if decay_steps <= 0:
+            raise ValueError('warmup_steps must be less than max_steps')
+    return end_factor, decay_steps
+
+
+def apply_param_group_lr_scales(param_groups, base_lr):
+    """Turn optional lr_scale into an absolute lr. Groups without it are unchanged."""
+    resolved = []
+    for group in param_groups:
+        if not isinstance(group, dict):
+            resolved.append(group)
+            continue
+        group = dict(group)
+        if 'lr_scale' in group:
+            if 'lr' in group:
+                raise ValueError('a parameter group cannot set both lr and lr_scale')
+            if base_lr is None:
+                raise ValueError('lr_scale requires the optimizer learning rate')
+            group['lr'] = base_lr * group.pop('lr_scale')
+        resolved.append(group)
+    return resolved

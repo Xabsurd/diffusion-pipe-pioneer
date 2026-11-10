@@ -1,0 +1,19 @@
+# Pre-bucketed 1024-area images. Each target has one same-stem condition file.
+# The condition is the offline degraded image, already aligned to the target.
+resolutions = [1024]
+enable_ar_bucket = true
+min_ar = 0.25
+max_ar = 4.0
+num_ar_buckets = 9
+frame_buckets = [1]
+skip_empty_caption = false
+
+[[directory]]
+path = '/path/to/targets/lora'
+control_path = '/path/to/controls/lora'
+num_repeats = 1
+
+[[directory]]
+path = '/path/to/targets/div2k'
+control_path = '/path/to/controls/div2k'
+num_repeats = 1

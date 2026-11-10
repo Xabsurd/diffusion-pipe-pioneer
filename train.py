@@ -24,7 +24,7 @@ import numpy as np
 
 from utils import dataset as dataset_util
 from utils import common
-from utils.common import is_main_process, get_rank, DTYPE_MAP, empty_cuda_cache
+from utils.common import is_main_process, get_rank, DTYPE_MAP, empty_cuda_cache, linear_scheduler_steps, apply_param_group_lr_scales
 import utils.saver
 from utils.isolate_rng import isolate_rng
 from utils.patches import apply_patches
@@ -739,13 +739,15 @@ if __name__ == '__main__':
                 kwargs['momentum'] = kwargs['momentum'] ** (1/gas)
 
             optimizer_dict = {}
-            for pg in model.get_param_groups(model_parameters):
+            for pg in apply_param_group_lr_scales(model.get_param_groups(model_parameters), kwargs.get('lr')):
                 param_kwargs = kwargs.copy()
                 if isinstance(pg, dict):
-                    # param group
+                    # param group. Groups with no explicit lr keep the optimizer lr.
                     for p in pg['params']:
-                        param_kwargs['lr'] = pg['lr']
-                        optimizer_dict[p] = klass([p], **param_kwargs)
+                        one = kwargs.copy()
+                        if 'lr' in pg:
+                            one['lr'] = pg['lr']
+                        optimizer_dict[p] = klass([p], **one)
                 else:
                     # param
                     optimizer_dict[pg] = klass([pg], **param_kwargs)
@@ -763,7 +765,7 @@ if __name__ == '__main__':
             kwargs['compile'] = config['compile']
             kwargs['mpu'] = pipeline_model.mpu()
             new_param_groups = []
-            param_groups = model.get_param_groups(model_parameters)
+            param_groups = apply_param_group_lr_scales(model.get_param_groups(model_parameters), kwargs.get('lr'))
             for pg in param_groups:
                 params = pg.pop('params')
                 params_2d = []
@@ -786,7 +788,7 @@ if __name__ == '__main__':
                 new_param_groups.append(pg_other)
             param_groups = new_param_groups
         else:
-            param_groups = model.get_param_groups(model_parameters)
+            param_groups = apply_param_group_lr_scales(model.get_param_groups(model_parameters), kwargs.get('lr'))
 
         # split weight decay and no weight decay params
         new_param_groups = []
@@ -869,18 +871,7 @@ if __name__ == '__main__':
     if scheduler_type == 'constant':
         lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0)
     elif scheduler_type == 'linear':
-        end_factor = 0.0
-        decay_steps = config['epochs'] * steps_per_epoch
-        if 'lr_scheduler_end_lr' in config:
-            initial_lr = config['optimizer']['lr']
-            end_lr = config['lr_scheduler_end_lr']
-            if not 0 <= end_lr <= initial_lr or initial_lr <= 0:
-                raise ValueError('lr_scheduler_end_lr must be between 0 and optimizer.lr, with optimizer.lr > 0')
-            end_factor = end_lr / initial_lr
-            # Warmup is part of the epoch budget, so reach end_lr on the final step.
-            decay_steps -= config['warmup_steps']
-            if decay_steps <= 0:
-                raise ValueError('warmup_steps must be less than the total training steps')
+        end_factor, decay_steps = linear_scheduler_steps(config, steps_per_epoch)
         lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=end_factor, total_iters=decay_steps)
     elif scheduler_type == 'cosine':
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['epochs'] * steps_per_epoch, eta_min=1e-6)
