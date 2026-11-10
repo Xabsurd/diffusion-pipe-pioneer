@@ -869,7 +869,19 @@ if __name__ == '__main__':
     if scheduler_type == 'constant':
         lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0)
     elif scheduler_type == 'linear':
-        lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.0, total_iters=config['epochs'] * steps_per_epoch)
+        end_factor = 0.0
+        decay_steps = config['epochs'] * steps_per_epoch
+        if 'lr_scheduler_end_lr' in config:
+            initial_lr = config['optimizer']['lr']
+            end_lr = config['lr_scheduler_end_lr']
+            if not 0 <= end_lr <= initial_lr or initial_lr <= 0:
+                raise ValueError('lr_scheduler_end_lr must be between 0 and optimizer.lr, with optimizer.lr > 0')
+            end_factor = end_lr / initial_lr
+            # Warmup is part of the epoch budget, so reach end_lr on the final step.
+            decay_steps -= config['warmup_steps']
+            if decay_steps <= 0:
+                raise ValueError('warmup_steps must be less than the total training steps')
+        lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=end_factor, total_iters=decay_steps)
     elif scheduler_type == 'cosine':
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['epochs'] * steps_per_epoch, eta_min=1e-6)
     else:
